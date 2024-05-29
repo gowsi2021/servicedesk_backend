@@ -1,6 +1,6 @@
 import express from 'express';
-import path from 'path';
 import cors from 'cors';
+import mysql from 'mysql2';
 
 const app = express();
 app.use(cors()); // Enable CORS
@@ -9,16 +9,11 @@ const port = 3001;
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-//const mysql = require('mysql2');
-import mysql from 'mysql2';
-//const { Console } = require('console');
-import Console from 'console';
-
 // Create a connection to the MySQL server
 const connection = mysql.createConnection({
     host: 'localhost',
     user: 'root',
-    password: 'Gowsi@123',
+    password: 'Aj2607',
 });
 
 // Connect to the MySQL server
@@ -38,98 +33,118 @@ connection.connect((err) => {
         if (queryError) {
             console.error('Error creating database:', queryError);
         } else {
-            connection.query('USE servicedesk');
-            console.log(`Database ${databaseName} created successfully`);
+            connection.query('USE servicedesk', (err) => {
+                if (err) {
+                    console.error('Error using database:', err);
+                    return;
+                }
+                console.log(`Database ${databaseName} selected successfully`);
 
-            const createTableQuery = 'CREATE TABLE IF NOT EXISTS customers (id int auto_increment PRIMARY KEY,username VARCHAR(30) NOT NULL,email VARCHAR(30) NOT NULL, password VARCHAR(12) NOT NULL,companyname varchar(30) NOT NULL,phonenumber varchar(12) NOT NULL,project VARCHAR(30),access VARCHAR(20));'
+                const createTableQuery = `CREATE TABLE IF NOT EXISTS customers (
+                    id int auto_increment PRIMARY KEY,
+                    username VARCHAR(30) NOT NULL,
+                    email VARCHAR(30) NOT NULL,
+                    password VARCHAR(12) NOT NULL,
+                    companyname VARCHAR(30) NOT NULL,
+                    phonenumber VARCHAR(12) NOT NULL,
+                    project VARCHAR(30),
+                    access VARCHAR(20)
+                )`;
 
-            connection.query(createTableQuery, (queryError) => {
-
-                console.log('Table created successfully');
-                console.log(queryError);
-
-            })
-
+                connection.query(createTableQuery, (queryError) => {
+                    if (queryError) {
+                        console.error('Error creating table:', queryError);
+                    } else {
+                        console.log('Table created successfully');
+                    }
+                });
+            });
         }
-
-
     });
-
 });
 
 app.get('/', (req, res) => {
     console.log("Server is running");
+    res.send("Server is running");
 });
 
 app.post('/sign', (req, res) => {
-    console.log("Signup");
+    console.log("Signup request received");
     console.log(req.body);
-    connection.query('USE servicedesk');
-    const username = req.body.username;
-    const email = req.body.email;
-    const password = req.body.password;
-    const companyname = req.body.companyName;
-    const phonenumber = req.body.phoneNumber;
+
+    const { username, email, password, companyname, phonenumber } = req.body;
     const project = 'loree';
     const access = 'yes';
+
     console.log("Company Name: ", companyname);
 
     if (username && password) {
         console.log(username, email, password, companyname, phonenumber, project, access);
-        // Perform an INSERT INTO query
 
-        const insertQuery = `INSERT INTO customers(username, email, password, companyname, phonenumber, project, access) VALUES (?, ?, ?, ?, ?, ?, ?)`;
-        const values = [username, email, password, companyname, phonenumber, project, access];
-
-        connection.query(insertQuery, values, (queryError) => {
-            if (queryError) {
-                console.log("Query error", queryError);
-                res.send("0");
-            }
-            else {
-                res.send("1");
-                console.log('Inserted successfully');
+        // Check if email already exists in the database
+        connection.query('SELECT * FROM customers WHERE email = ?', [email], (error, results) => {
+            if (error) {
+                console.error('Error checking email:', error);
+                res.status(500).json({ error: 'Internal server error' });
+                return;
             }
 
-
-
-        })
-
-    }
-})
-
-app.post('/login', async function (request, response) {
-    console.log('login');
-    console.log(request.body);
-    connection.query('USE servicedesk');
-    // Capture the input fields
-    let email = request.body.email;
-    let password = request.body.password;
-    // Ensure the input fields exists and are not empty
-    if (email && password) {
-        console.log("Checking username and password");
-        // Execute SQL query that'll select the account from the database based on the specified username and password
-        connection.query('SELECT * FROM customers WHERE email = ? AND password = ?', [email, password], function (error, results, fields) {
-            // If there is an issue with the query, output the error
-            if (error) throw error;
-            // If the account exists
             if (results.length > 0) {
-                console.log("Login success");
-                response.send("1");
-            } else {
-                response.send("0");
-                console.log("Incorrect username or password");
+                // Email already exists, return error response to client
+                res.status(400).json({ error: 'Email already in use' });
+                return;
             }
-            response.end();
+
+            // Perform an INSERT INTO query
+            const insertQuery = `INSERT INTO customers(username, email, password, companyname, phonenumber, project, access) VALUES (?, ?, ?, ?, ?, ?, ?)`;
+            const values = [username, email, password, companyname, phonenumber, project, access];
+
+            connection.query(insertQuery, values, (queryError) => {
+                if (queryError) {
+                    console.error("Query error:", queryError);
+                    res.status(500).json({ error: 'Internal server error' });
+                } else {
+                    res.status(201).json({ message: 'Inserted successfully' });
+                    console.log('Inserted successfully');
+                }
+            });
         });
     } else {
-        response.end();
+        res.status(400).json({ error: 'Invalid input: Username and password required' });
+        console.log("Invalid input: Username and password required");
     }
-})
+});
 
+app.post('/login', async (req, res) => {
+    console.log('Login request received');
+    console.log(req.body);
 
+    const { email, password } = req.body;
 
+    if (email && password) {
+        console.log("Checking username and password");
 
+        connection.query('SELECT * FROM customers WHERE email = ? AND password = ?', [email, password], (error, results) => {
+            if (error) {
+                console.error('Error checking login:', error);
+                res.status(500).json({ error: 'Internal server error' });
+                return;
+            }
+
+            if (results.length > 0) {
+                console.log("Login success");
+                console.log(Response.data);
+                res.status(200).json({ message: 'Login successful' });
+            } else {
+                console.log("Incorrect email or password");
+                res.status(401).json({ error: 'Incorrect email or password' });
+            }
+        });
+    } else {
+        res.status(400).json({ error: 'Email and password required' });
+        console.log("Email and password required");
+    }
+});
 
 // Start the server
 app.listen(port, () => {
